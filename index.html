@@ -1,255 +1,339 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Calendar, MapPin, Clock, Loader, XCircle, CheckCircle, ExternalLink, Bell, Zap } from 'lucide-react';
-
-// --- 模擬的場館資料 (已修正所有網址格式) ---
-const allCourtsData = [
-  // 台北市十二區運動中心
-  { id: 1, name: '台北體育館', district: '松山區', address: '台北市松山區南京東路四段10號', url: 'https://tpsc.cyc.org.tw/' },
-  { id: 2, name: '中正運動中心', district: '中正區', address: '台北市中正區信義路一段1號', url: 'https://zzsc.tpe-sports.com.tw/' },
-  { id: 3, name: '大安運動中心', district: '大安區', address: '台北市大安區辛亥路三段55號', url: 'https://dasc.tpe-sports.com.tw/' },
-  { id: 4, name: '中山運動中心', district: '中山區', address: '台北市中山區中山北路二段44巷2號', url: 'https://zssc.tpe-sports.com.tw/' },
-  { id: 5, name: '信義運動中心', district: '信義區', address: '台北市信義區松勤街100號', url: 'https://xysc.tpe-sports.com.tw/' },
-  { id: 6, name: '內湖運動中心', district: '內湖區', address: '台北市內湖區洲子街12號', url: 'https://nhsc.tpe-sports.com.tw/' },
-  { id: 7, name: '南港運動中心', district: '南港區', address: '台北市南港區玉成街69號', url: 'https://ngsc.tpe-sports.com.tw/' },
-  { id: 8, name: '文山運動中心', district: '文山區', address: '台北市文山區興隆路三段222號', url: 'https://wssc.tpe-sports.com.tw/' },
-  { id: 10, name: '大同運動中心', district: '大同區', address: '台北市大同區大龍街51號', url: 'https://dtsc.tpe-sports.com.tw/' },
-  { id: 11, name: '北投運動中心', district: '北投區', address: '台北市北投區石牌路一段39巷100號', url: 'https://btsc.tpe-sports.com.tw/' },
-  { id: 12, name: '士林運動中心', district: '士林區', address: '台北市士林區士商路1號', url: 'https://slsc.tpe-sports.com.tw/' },
-  { id: 13, name: '萬華運動中心', district: '萬華區', address: '台北市萬華區西寧南路6-1號', url: 'https://whsc.tpe-sports.com.tw/' },
-  // 台北市其他場地
-  { id: 9, name: '中央研究院 學術活動中心', district: '南港區', address: '台北市南港區研究院路二段128號', url: 'https://as.proi.com.tw/booking_info.php' },
-  { id: 14, name: '臺北市網球中心', district: '內湖區', address: '台北市內湖區民權東路六段208號', url: 'https://tpe-tennis.proi.com.tw/booking_info.php' },
-  { id: 15, name: '迪卡儂 桂林店運動社', district: '萬華區', address: '台北市萬華區桂林路1號', url: 'https://www.decathlon.tw/zh/booking-service' },
-  // 新北市場館
-  { id: 16, name: '板橋國民運動中心', district: '板橋區', address: '新北市板橋區智樂路6號', url: 'https://www.bqsports.com.tw/' },
-  { id: 17, name: '汐止國民運動中心', district: '汐止區', address: '新北市汐止區汐科路321號', url: 'https://www.xzcsc.com.tw/' },
-  { id: 18, name: '中和國民運動中心', district: '中和區', address: '新北市中和區錦和路350-1號', url: 'https://www.zhsports.com.tw/' },
-  { id: 19, name: '永和國民運動中心', district: '永和區', address: '新北市永和區永利路250號', url: 'https://www.yhcsc.tw/' }
-];
-
-// --- 預約提醒彈窗元件 ---
-const BookingAlarmModal = ({ booking, onConfirm, onClose }) => {
-  if (!booking) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 m-4 max-w-sm w-full text-center transform transition-all animate-pulse">
-        <Zap className="w-16 h-16 text-yellow-400 mx-auto animate-bounce" />
-        <h2 className="text-2xl font-bold text-red-600 mt-4">時間到！準備預約！</h2>
-        <p className="text-slate-600 mt-2 text-lg">
-          您設定的 <span className="font-bold text-blue-600">{booking.court.name}</span>
-        </p>
-        <p className="text-slate-600 text-lg">
-          <span className="font-bold text-blue-600">{booking.slot.time}</span> 時段已開放！
-        </p>
-        <button
-          onClick={onConfirm}
-          className="mt-6 w-full px-8 py-4 bg-red-500 text-white font-bold rounded-lg shadow-lg hover:bg-red-600 transition-transform transform hover:scale-105 text-xl"
-        >
-          <Zap className="inline-block w-6 h-6 mr-2" />
-          立即前往預約
-        </button>
-        <button
-          onClick={onClose}
-          className="mt-4 text-sm text-slate-500 hover:text-slate-700"
-        >
-          稍後再說
-        </button>
-      </div>
-    </div>
-  );
-};
-
-
-// --- 主要的 App 元件 ---
-export default function App() {
-  // --- 狀態管理 (State) ---
-  const [selectedDistricts, setSelectedDistricts] = useState(['信義區', '大安區', '松山區']);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [scheduledBooking, setScheduledBooking] = useState(null);
-  const [showAlarm, setShowAlarm] = useState(false);
-  const alarmTimeoutRef = useRef(null);
-
-  // --- 處理行政區選擇變更的函式 ---
-  const handleDistrictChange = (district) => {
-    setSelectedDistricts(prev =>
-      prev.includes(district)
-        ? prev.filter(d => d !== district)
-        : [...prev, district]
-    );
-  };
-
-  // --- 執行查詢的函式 ---
-  const handleSearch = () => {
-    setIsSearching(true);
-    setHasSearched(true);
-    setSearchResults([]); 
-
-    setTimeout(() => {
-      const filteredCourts = allCourtsData.filter(court => selectedDistricts.includes(court.district));
-      const results = filteredCourts.map(court => ({
-        ...court,
-        timeSlots: [
-          '18:00 - 19:00', '19:00 - 20:00', '20:00 - 21:00', '21:00 - 22:00'
-        ].map(time => ({
-          time,
-          status: Math.random() > 0.5 ? 'unavailable' : 'available'
-        }))
-      }));
-      setSearchResults(results);
-      setIsSearching(false);
-    }, 1000);
-  };
-
-  // --- 設定預約排程的函式 ---
-  const handleScheduleBooking = (court, slot) => {
-    // 假設預約時間為 10 秒後，以利測試
-    const bookingTime = new Date(Date.now() + 10000); 
-    const newBooking = { court, slot, date: selectedDate, bookingTime };
-    setScheduledBooking(newBooking);
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大台北羽球場地預約小幫手</title>
     
-    if (alarmTimeoutRef.current) {
-        clearTimeout(alarmTimeoutRef.current);
-    }
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 React 和 ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- 引入 Babel 來即時編譯 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    alarmTimeoutRef.current = setTimeout(() => {
-      setShowAlarm(true);
-    }, 10000); // 10 秒後觸發
-  };
+    <style>
+        /* 增加一些自訂動畫 */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes pulse-strong {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.02); }
+        }
+        .animate-pulse-strong {
+            animation: pulse-strong 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes bounce-slow {
+            0%, 100% {
+                transform: translateY(-15%);
+                animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+            }
+            50% {
+                transform: translateY(0);
+                animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+            }
+        }
+        .animate-bounce-slow {
+            animation: bounce-slow 1.5s infinite;
+        }
+        @keyframes tada {
+            from { transform: scale3d(1, 1, 1); }
+            10%, 20% { transform: scale3d(.9, .9, .9) rotate3d(0, 0, 1, -3deg); }
+            30%, 50%, 70%, 90% { transform: scale3d(1.1, 1.1, 1.1) rotate3d(0, 0, 1, 3deg); }
+            40%, 60%, 80% { transform: scale3d(1.1, 1.1, 1.1) rotate3d(0, 0, 1, -3deg); }
+            to { transform: scale3d(1, 1, 1); }
+        }
+        .animate-tada {
+            animation: tada 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
 
-  // --- 取消預約排程 ---
-  const cancelScheduledBooking = () => {
-    setScheduledBooking(null);
-    if (alarmTimeoutRef.current) {
-        clearTimeout(alarmTimeoutRef.current);
-        alarmTimeoutRef.current = null;
-    }
-  };
+    <div id="root"></div>
 
-  // --- 處理鬧鐘確認 ---
-  const handleAlarmConfirm = () => {
-    const bookingUrl = scheduledBooking.court.url;
-    window.open(bookingUrl, '_blank');
-    setShowAlarm(false);
-    setScheduledBooking(null);
-  };
+    <script type="text/babel">
+        // 從全域 React 物件中取得 Hooks
+        const { useState, useEffect, useRef } = React;
+
+        // --- SVG 圖示元件 ---
+        // 將 lucide-react 圖示替換為內聯 SVG，以避免額外依賴
+        const Icon = ({ className, children }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+        const Search = ({ className }) => <Icon className={className}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></Icon>;
+        const Calendar = ({ className }) => <Icon className={className}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></Icon>;
+        const MapPin = ({ className }) => <Icon className={className}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></Icon>;
+        const Clock = ({ className }) => <Icon className={className}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></Icon>;
+        const Loader = ({ className }) => <Icon className={className}><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></Icon>;
+        const XCircle = ({ className }) => <Icon className={className}><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></Icon>;
+        const CheckCircle = ({ className }) => <Icon className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></Icon>;
+        const ExternalLink = ({ className }) => <Icon className={className}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></Icon>;
+        const Bell = ({ className }) => <Icon className={className}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></Icon>;
+        const Zap = ({ className }) => <Icon className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></Icon>;
 
 
-  // --- 取得所有可選的行政區 ---
-  const allDistricts = [...new Set(allCourtsData.map(c => c.district))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+        // --- 模擬的場館資料 ---
+        const allCourtsData = [
+            // 台北市十二區運動中心
+            { id: 1, name: '台北體育館', district: '松山區', address: '台北市松山區南京東路四段10號', url: 'https://tpsc.cyc.org.tw/' },
+            { id: 2, name: '中正運動中心', district: '中正區', address: '台北市中正區信義路一段1號', url: 'https://zzsc.tpe-sports.com.tw/' },
+            { id: 3, name: '大安運動中心', district: '大安區', address: '台北市大安區辛亥路三段55號', url: 'https://dasc.tpe-sports.com.tw/' },
+            { id: 4, name: '中山運動中心', district: '中山區', address: '台北市中山區中山北路二段44巷2號', url: 'https://zssc.tpe-sports.com.tw/' },
+            { id: 5, name: '信義運動中心', district: '信義區', address: '台北市信義區松勤街100號', url: 'https://xysc.tpe-sports.com.tw/' },
+            { id: 6, name: '內湖運動中心', district: '內湖區', address: '台北市內湖區洲子街12號', url: 'https://nhsc.tpe-sports.com.tw/' },
+            { id: 7, name: '南港運動中心', district: '南港區', address: '台北市南港區玉成街69號', url: 'https://ngsc.tpe-sports.com.tw/' },
+            { id: 8, name: '文山運動中心', district: '文山區', address: '台北市文山區興隆路三段222號', url: 'https://wssc.tpe-sports.com.tw/' },
+            { id: 10, name: '大同運動中心', district: '大同區', address: '台北市大同區大龍街51號', url: 'https://dtsc.tpe-sports.com.tw/' },
+            { id: 11, name: '北投運動中心', district: '北投區', address: '台北市北投區石牌路一段39巷100號', url: 'https://btsc.tpe-sports.com.tw/' },
+            { id: 12, name: '士林運動中心', district: '士林區', address: '台北市士林區士商路1號', url: 'https://slsc.tpe-sports.com.tw/' },
+            { id: 13, name: '萬華運動中心', district: '萬華區', address: '台北市萬華區西寧南路6-1號', url: 'https://whsc.tpe-sports.com.tw/' },
+            // 台北市其他場地
+            { id: 9, name: '中央研究院 學術活動中心', district: '南港區', address: '台北市南港區研究院路二段128號', url: 'https://as.proi.com.tw/booking_info.php' },
+            { id: 14, name: '臺北市網球中心', district: '內湖區', address: '台北市內湖區民權東路六段208號', url: 'https://tpe-tennis.proi.com.tw/booking_info.php' },
+            { id: 15, name: '迪卡儂 桂林店運動社', district: '萬華區', address: '台北市萬華區桂林路1號', url: 'https://www.decathlon.tw/zh/booking-service' },
+            // 新北市場館
+            { id: 16, name: '板橋國民運動中心', district: '板橋區', address: '新北市板橋區智樂路6號', url: 'https://www.bqsports.com.tw/' },
+            { id: 17, name: '汐止國民運動中心', district: '汐止區', address: '新北市汐止區汐科路321號', url: 'https://www.xzcsc.com.tw/' },
+            { id: 18, name: '中和國民運動中心', district: '中和區', address: '新北市中和區錦和路350-1號', url: 'https://www.zhsports.com.tw/' },
+            { id: 19, name: '永和國民運動中心', district: '永和區', address: '新北市永和區永利路250號', url: 'https://www.yhcsc.tw/' }
+        ];
 
+        // --- 預約提醒彈窗元件 ---
+        const BookingAlarmModal = ({ booking, onConfirm, onClose }) => {
+            if (!booking) return null;
 
-  // --- 渲染 (Render) ---
-  return (
-    <div className="bg-slate-50 min-h-screen font-sans text-slate-800 p-4 sm:p-6 lg:p-8">
-      <BookingAlarmModal 
-        booking={scheduledBooking} 
-        show={showAlarm}
-        onConfirm={handleAlarmConfirm}
-        onClose={() => setShowAlarm(false)}
-      />
-      <div className="max-w-4xl mx-auto">
-        <header className="text-center mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-blue-600">大台北羽球場地預約小幫手</h1>
-          <p className="text-slate-500 mt-2">快速查詢、提前設定，光速完成預約！</p>
-        </header>
-
-        {scheduledBooking && !showAlarm && (
-          <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-8 shadow-lg flex justify-between items-center">
-            <div>
-              <p className="font-bold flex items-center"><Bell className="w-5 h-5 mr-2 animate-tada"/>已設定預約提醒！</p>
-              <p>{scheduledBooking.court.name} - {scheduledBooking.slot.time}</p>
-              <p className="text-sm">將在預約開放時提醒您 (此為10秒後測試)</p>
-            </div>
-            <button onClick={cancelScheduledBooking} className="text-red-500 hover:text-red-700 font-bold">取消</button>
-          </div>
-        )}
-
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-1">
-              <label htmlFor="date-picker" className="flex items-center text-lg font-semibold mb-2 text-slate-700"><Calendar className="w-5 h-5 mr-2 text-blue-500" />選擇日期</label>
-              <input type="date" id="date-picker" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
-            </div>
-            <div className="md:col-span-2">
-              <h3 className="flex items-center text-lg font-semibold mb-2 text-slate-700"><MapPin className="w-5 h-5 mr-2 text-blue-500" />選擇行政區</h3>
-              <div className="flex flex-wrap gap-2">
-                {allDistricts.map(district => (
-                  <button key={district} onClick={() => handleDistrictChange(district)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedDistricts.includes(district) ? 'bg-blue-500 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{district}</button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="mt-6 text-center">
-            <button onClick={handleSearch} disabled={isSearching || selectedDistricts.length === 0} className="w-full md:w-auto px-8 py-3 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition-transform transform hover:scale-105 disabled:bg-slate-300 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center mx-auto">
-              {isSearching ? <><Loader className="animate-spin w-5 h-5 mr-2" />查詢中...</> : <><Search className="w-5 h-5 mr-2" />查詢空位</>}
-            </button>
-          </div>
-        </div>
-        
-        <main>
-           {!isSearching && hasSearched && searchResults.length === 0 && (
-            <div className="text-center bg-white p-10 rounded-2xl shadow-md">
-              <XCircle className="w-16 h-16 text-red-400 mx-auto" />
-              <h3 className="mt-4 text-2xl font-semibold">查無結果</h3>
-              <p className="text-slate-500 mt-2">您選擇的區域沒有場館資料，或請重新調整查詢條件。</p>
-            </div>
-          )}
-          {!isSearching && searchResults.length > 0 && (
-            <div className="space-y-6">
-              {searchResults.map(court => (
-                <div key={court.id} className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden transition-all hover:shadow-xl">
-                  <div className="p-6">
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
-                      <div>
-                        <h2 className="text-2xl font-bold text-blue-700">{court.name}</h2>
-                        <p className="text-slate-500 flex items-center mt-1"><MapPin className="w-4 h-4 mr-1.5" /> {court.district} - {court.address}</p>
-                      </div>
-                      <a href={court.url} target="_blank" rel="noopener noreferrer" className="mt-3 sm:mt-0 flex-shrink-0 px-4 py-2 bg-blue-100 text-blue-600 font-semibold rounded-lg hover:bg-blue-200 transition flex items-center">前往官網 <ExternalLink className="w-4 h-4 ml-2" /></a>
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 m-4 max-w-sm w-full text-center transform transition-all animate-pulse-strong">
+                        <Zap className="w-16 h-16 text-yellow-400 mx-auto animate-bounce-slow" />
+                        <h2 className="text-2xl font-bold text-red-600 mt-4">時間到！準備預約！</h2>
+                        <p className="text-slate-600 mt-2 text-lg">
+                            您設定的 <span className="font-bold text-blue-600">{booking.court.name}</span>
+                        </p>
+                        <p className="text-slate-600 text-lg">
+                            <span className="font-bold text-blue-600">{booking.slot.time}</span> 時段已開放！
+                        </p>
+                        <button
+                            onClick={onConfirm}
+                            className="mt-6 w-full px-8 py-4 bg-red-500 text-white font-bold rounded-lg shadow-lg hover:bg-red-600 transition-transform transform hover:scale-105 text-xl"
+                        >
+                            <Zap className="inline-block w-6 h-6 mr-2" />
+                            立即前往預約
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="mt-4 text-sm text-slate-500 hover:text-slate-700"
+                        >
+                            稍後再說
+                        </button>
                     </div>
-                    <div className="border-t border-slate-200 pt-4">
-                       <h4 className="font-semibold mb-3 flex items-center"><Clock className="w-5 h-5 mr-2 text-slate-600"/>可用時段 (點擊可設定預約提醒)</h4>
-                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {court.timeSlots.map(slot => (
-                          <button
-                            key={slot.time}
-                            disabled={slot.status !== 'available'}
-                            onClick={() => handleScheduleBooking(court, slot)}
-                            className={`p-3 rounded-lg text-center text-sm font-semibold transition-all ${
-                              slot.status === 'available'
-                                ? 'bg-green-100 text-green-800 border-l-4 border-green-500 cursor-pointer hover:bg-green-200 hover:shadow-md'
-                                : 'bg-slate-100 text-slate-500 cursor-not-allowed'
-                            }`}
-                          >
-                            <p>{slot.time}</p>
-                            <p className="flex items-center justify-center mt-1 text-xs">
-                              {slot.status === 'available' ? <><CheckCircle className="w-3.5 h-3.5 mr-1"/>可預約</> : <><XCircle className="w-3.5 h-3.5 mr-1"/>已額滿</>}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-           {!hasSearched && (
-             <div className="text-center bg-white p-10 rounded-2xl shadow-md border border-slate-200">
-                <h3 className="text-2xl font-semibold">準備開始您的預約之旅</h3>
-                <p className="text-slate-500 mt-2">請選擇日期和您感興趣的行政區，然後點擊「查詢空位」按鈕。</p>
-             </div>
-           )}
-        </main>
-        
-        <footer className="text-center mt-12 text-sm text-slate-400">
-          <p>免責聲明：本工具為輔助查詢之用，實際場地狀況與預約結果請以各運動中心官方網站為準。</p>
-          <p className="mt-1">祝您打球愉快！</p>
-        </footer>
-      </div>
-    </div>
-  );
-}
+            );
+        };
+
+        // --- 主要的 App 元件 ---
+        function App() {
+            const [selectedDistricts, setSelectedDistricts] = useState(['信義區', '大安區', '松山區']);
+            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+            const [searchResults, setSearchResults] = useState([]);
+            const [isSearching, setIsSearching] = useState(false);
+            const [hasSearched, setHasSearched] = useState(false);
+            const [scheduledBooking, setScheduledBooking] = useState(null);
+            const [showAlarm, setShowAlarm] = useState(false);
+            const alarmTimeoutRef = useRef(null);
+
+            const handleDistrictChange = (district) => {
+                setSelectedDistricts(prev =>
+                    prev.includes(district)
+                        ? prev.filter(d => d !== district)
+                        : [...prev, district]
+                );
+            };
+
+            const handleSearch = () => {
+                setIsSearching(true);
+                setHasSearched(true);
+                setSearchResults([]);
+
+                setTimeout(() => {
+                    const filteredCourts = allCourtsData.filter(court => selectedDistricts.includes(court.district));
+                    const results = filteredCourts.map(court => ({
+                        ...court,
+                        timeSlots: [
+                            '18:00 - 19:00', '19:00 - 20:00', '20:00 - 21:00', '21:00 - 22:00'
+                        ].map(time => ({
+                            time,
+                            status: Math.random() > 0.5 ? 'unavailable' : 'available'
+                        }))
+                    }));
+                    setSearchResults(results);
+                    setIsSearching(false);
+                }, 1000);
+            };
+
+            const handleScheduleBooking = (court, slot) => {
+                const bookingTime = new Date(Date.now() + 10000);
+                const newBooking = { court, slot, date: selectedDate, bookingTime };
+                setScheduledBooking(newBooking);
+
+                if (alarmTimeoutRef.current) {
+                    clearTimeout(alarmTimeoutRef.current);
+                }
+
+                alarmTimeoutRef.current = setTimeout(() => {
+                    setShowAlarm(true);
+                }, 10000);
+            };
+
+            const cancelScheduledBooking = () => {
+                setScheduledBooking(null);
+                if (alarmTimeoutRef.current) {
+                    clearTimeout(alarmTimeoutRef.current);
+                    alarmTimeoutRef.current = null;
+                }
+            };
+
+            const handleAlarmConfirm = () => {
+                const bookingUrl = scheduledBooking.court.url;
+                window.open(bookingUrl, '_blank');
+                setShowAlarm(false);
+                setScheduledBooking(null);
+            };
+
+            const allDistricts = [...new Set(allCourtsData.map(c => c.district))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+
+            return (
+                <div className="font-sans text-slate-800 p-4 sm:p-6 lg:p-8">
+                    {showAlarm && <BookingAlarmModal
+                        booking={scheduledBooking}
+                        onConfirm={handleAlarmConfirm}
+                        onClose={() => setShowAlarm(false)}
+                    />}
+                    <div className="max-w-4xl mx-auto">
+                        <header className="text-center mb-8">
+                            <h1 className="text-3xl sm:text-4xl font-bold text-blue-600">大台北羽球場地預約小幫手</h1>
+                            <p className="text-slate-500 mt-2">快速查詢、提前設定，光速完成預約！</p>
+                        </header>
+
+                        {scheduledBooking && !showAlarm && (
+                            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-8 shadow-lg flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold flex items-center"><Bell className="w-5 h-5 mr-2 animate-tada" />已設定預約提醒！</p>
+                                    <p>{scheduledBooking.court.name} - {scheduledBooking.slot.time}</p>
+                                    <p className="text-sm">將在預約開放時提醒您 (此為10秒後測試)</p>
+                                </div>
+                                <button onClick={cancelScheduledBooking} className="text-red-500 hover:text-red-700 font-bold">取消</button>
+                            </div>
+                        )}
+
+                        <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 mb-8">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="md:col-span-1">
+                                    <label htmlFor="date-picker" className="flex items-center text-lg font-semibold mb-2 text-slate-700"><Calendar className="w-5 h-5 mr-2 text-blue-500" />選擇日期</label>
+                                    <input type="date" id="date-picker" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <h3 className="flex items-center text-lg font-semibold mb-2 text-slate-700"><MapPin className="w-5 h-5 mr-2 text-blue-500" />選擇行政區</h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {allDistricts.map(district => (
+                                            <button key={district} onClick={() => handleDistrictChange(district)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${selectedDistricts.includes(district) ? 'bg-blue-500 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{district}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-6 text-center">
+                                <button onClick={handleSearch} disabled={isSearching || selectedDistricts.length === 0} className="w-full md:w-auto px-8 py-3 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition-transform transform hover:scale-105 disabled:bg-slate-300 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center mx-auto">
+                                    {isSearching ? <><Loader className="animate-spin w-5 h-5 mr-2" />查詢中...</> : <><Search className="w-5 h-5 mr-2" />查詢空位</>}
+                                </button>
+                            </div>
+                        </div>
+
+                        <main>
+                            {isSearching && (
+                                <div className="text-center p-10">
+                                    <Loader className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
+                                    <p className="mt-4 text-slate-500">正在為您火力全開搜尋中...</p>
+                                </div>
+                            )}
+                            {!isSearching && hasSearched && searchResults.length === 0 && (
+                                <div className="text-center bg-white p-10 rounded-2xl shadow-md">
+                                    <XCircle className="w-16 h-16 text-red-400 mx-auto" />
+                                    <h3 className="mt-4 text-2xl font-semibold">查無結果</h3>
+                                    <p className="text-slate-500 mt-2">您選擇的區域沒有場館資料，或請重新調整查詢條件。</p>
+                                </div>
+                            )}
+                            {!isSearching && searchResults.length > 0 && (
+                                <div className="space-y-6">
+                                    {searchResults.map(court => (
+                                        <div key={court.id} className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden transition-all hover:shadow-xl">
+                                            <div className="p-6">
+                                                <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
+                                                    <div>
+                                                        <h2 className="text-2xl font-bold text-blue-700">{court.name}</h2>
+                                                        <p className="text-slate-500 flex items-center mt-1"><MapPin className="w-4 h-4 mr-1.5" /> {court.district} - {court.address}</p>
+                                                    </div>
+                                                    <a href={court.url} target="_blank" rel="noopener noreferrer" className="mt-3 sm:mt-0 flex-shrink-0 px-4 py-2 bg-blue-100 text-blue-600 font-semibold rounded-lg hover:bg-blue-200 transition flex items-center">前往官網 <ExternalLink className="w-4 h-4 ml-2" /></a>
+                                                </div>
+                                                <div className="border-t border-slate-200 pt-4">
+                                                    <h4 className="font-semibold mb-3 flex items-center"><Clock className="w-5 h-5 mr-2 text-slate-600" />可用時段 (點擊可設定預約提醒)</h4>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                                        {court.timeSlots.map(slot => (
+                                                            <button
+                                                                key={slot.time}
+                                                                disabled={slot.status !== 'available'}
+                                                                onClick={() => handleScheduleBooking(court, slot)}
+                                                                className={`p-3 rounded-lg text-center text-sm font-semibold transition-all ${slot.status === 'available'
+                                                                        ? 'bg-green-100 text-green-800 border-l-4 border-green-500 cursor-pointer hover:bg-green-200 hover:shadow-md'
+                                                                        : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                                                                    }`}
+                                                            >
+                                                                <p>{slot.time}</p>
+                                                                <p className="flex items-center justify-center mt-1 text-xs">
+                                                                    {slot.status === 'available' ? <><CheckCircle className="w-3.5 h-3.5 mr-1" />可預約</> : <><XCircle className="w-3.5 h-3.5 mr-1" />已額滿</>}
+                                                                </p>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {!hasSearched && (
+                                <div className="text-center bg-white p-10 rounded-2xl shadow-md border border-slate-200">
+                                    <h3 className="text-2xl font-semibold">準備開始您的預約之旅</h3>
+                                    <p className="text-slate-500 mt-2">請選擇日期和您感興趣的行政區，然後點擊「查詢空位」按鈕。</p>
+                                </div>
+                            )}
+                        </main>
+
+                        <footer className="text-center mt-12 text-sm text-slate-400">
+                            <p>免責聲明：本工具為輔助查詢之用，實際場地狀況與預約結果請以各運動中心官方網站為準。</p>
+                            <p className="mt-1">祝您打球愉快！</p>
+                        </footer>
+                    </div>
+                </div>
+            );
+        }
+
+        // 將 App 元件渲染到 root div 中
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+
+    </script>
+
+</body>
+</html>
